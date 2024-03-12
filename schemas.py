@@ -54,3 +54,5 @@ class payment(BaseModel):
     user_id: str
     amount: str
     
+class ParkingLots(BaseModel):
+    pass
