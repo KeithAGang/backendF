@@ -58,8 +58,9 @@ async def pay_for_parking_now(amount: float, user: Users = Depends(services.get_
     return await services.pay_for_Lot(amount=amount, user=user, db=db)    
 
 @app.post("/book_parking/{hours}", status_code=200)
-async def book_parking_lot(hours: int, user: Users = Depends(services.get_current_user), db: _orm.Session = Depends(services.get_db)):
-    return await services.book_parking_lot(user=user, db=db, hours=hours)
+async def book_parking_lot(hours: int, immediate_booking: bool = True, user: UserDetails = Depends(services.get_current_user), db: _orm.Session = Depends(services.get_db)):
+    return await services.book_parking_lot(user=user, db=db, hours=hours, immediate_booking=immediate_booking)
+
 
 
 #if you want to add lots to the db, uncommnet the code below

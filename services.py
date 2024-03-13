@@ -25,17 +25,26 @@ async def get_user_by_email(email: str, db: _orm.Session):
 
 async def create_user(user: schemas.UserCreate, db: _orm.Session):
     try:
-        user_obj = models.User(email = user.email, hashed_password=_hash.bcrypt.hash(user.hashed_password))
+        hashed_password = _hash.bcrypt.hash(user.hashed_password)
+        user_data = user.model_dump()
+        user_data.pop('hashed_password')  # Remove hashed_password from user_data
+        
+        user_obj = models.User(hashed_password=hashed_password, **user_data)
         db.add(user_obj)
         db.commit()
         db.refresh(user_obj)
+        
         user_account = models.AccountBalance(user_id=user_obj.id)
         db.add(user_account)
         db.commit()
         db.refresh(user_account)
+        
         return user_obj
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Client error: {str(e)}")
+
+
+
 
 
 async def authenticate_user(email:str, password:str, db: _orm.Session):
@@ -59,10 +68,18 @@ async def get_current_user(db: _orm.Session = Depends(get_db), token: str = Depe
     try:
         payload = jwt.decode(token, JWT_SECRET, algorithms=["HS256"])
         user = db.query(models.User).get(payload["id"])
+        
+        if user:
+            user_details = schemas.UserDetails(id=user.id, name=user.name, surname=user.surname, email=user.email)
+            return schemas.UserDetails.from_orm(user) 
+        else:
+            raise HTTPException(status_code=404, detail="User not found")
+    
     except jwt.exceptions.DecodeError:
         raise HTTPException(status_code=401, detail="Invalid Token")
+
     
-    return schemas.Users.from_orm(user) 
+    
 
 async def generate_message(user: schemas.Users, db: _orm.Session, message: schemas.MessageCreate):
     try:
@@ -140,7 +157,7 @@ async def generate_messages(db: _orm.Session,msg_type: str, msg_body: str, user:
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Client error: {str(e)}")
 
-async def book_parking_lot(user: schemas.Users, db: _orm.Session, hours: int):
+async def book_parking_lot(user: schemas.Users, db: _orm.Session, hours: int, immediate_booking: bool):
     vacant_lots = db.query(models.ParkingLots).filter_by(lot_status="vacant").all()
     user_obj = db.query(models.User).filter(models.User.id == user.id).first()  # Fetch the user object
     
@@ -153,22 +170,25 @@ async def book_parking_lot(user: schemas.Users, db: _orm.Session, hours: int):
     payment_amount = calculate_payment_amount(hours)
     
     try:
-        payment_result = await pay_for_Lot(payment_amount, user=user, db=db)
-        
-        if "Insufficient Credits" in str(payment_result):
-            raise HTTPException(status_code=400, detail="Insufficient Credits to carry out this transaction")
-        
-        booking_start_time = _dt.datetime.utcnow()
-        booking_end_time = booking_start_time + _dt.timedelta(hours=hours)
-        
-        selected_lot.lot_status = "booked"
-        
-        booking = models.Booking(lot_id=selected_lot.lot_id, user_id=user.id, start_time=booking_start_time, end_time=booking_end_time)
-        
-        db.add(booking)
-        db.commit()
-        
-        message_body = f"You have successfully reserved parking lot {selected_lot.lot_id} for ${payment_amount}."
+        if immediate_booking:
+            payment_result = await pay_for_Lot(payment_amount, user=user, db=db)
+            
+            if "Insufficient Credits" in str(payment_result):
+                raise HTTPException(status_code=400, detail="Insufficient Credits to carry out this transaction")
+            
+            booking_start_time = _dt.datetime.utcnow()
+            booking_end_time = booking_start_time + _dt.timedelta(hours=hours)
+            
+            selected_lot.lot_status = "booked"
+            
+            booking = models.Booking(lot_id=selected_lot.lot_id, user_id=user.id, start_time=booking_start_time, end_time=booking_end_time)
+            
+            db.add(booking)
+            db.commit()
+            
+            message_body = f"You have successfully booked parking lot {selected_lot.lot_id} for {hours} hours for ${payment_amount}."
+        else:
+            message_body = f"You have successfully reserved parking lot {selected_lot.lot_id} for {hours} hours."
         
         return await generate_notification(db=db, msg_type="transaction", msg_body=message_body, user=user)
     

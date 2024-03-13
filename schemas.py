@@ -21,7 +21,15 @@ class Users(_UserBase):
     class Config:
         orm_mode = True
         from_attributes = True
-        
+
+class UserDetails(_UserBase):
+    id: str
+    name: str
+    surname: str
+    
+    class Config:
+        orm_mode = True
+        from_attributes = True
         
 class _MessageBase(BaseModel):
     msg_type: str = Field(default="normal")
