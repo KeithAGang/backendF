@@ -57,6 +57,7 @@ async def get_my_account(user: Users = Depends(services.get_current_user), db:_o
 async def pay_for_parking_now(amount: float, user: Users = Depends(services.get_current_user), db: _orm.Session = Depends(services.get_db)):
     return await services.pay_for_Lot(amount=amount, user=user, db=db)    
 
+#if you want to add lots to the db, uncommnet the code below
 # @app.get("/populate_lots")
 # def populate_the_lots(lots: ParkingLots, db:_orm.Session = Depends(services.get_db)):
 #     for x in range(1, 51):

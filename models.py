@@ -45,4 +45,3 @@ class ParkingLots(Base):
     lot_id = _sql.Column(_sql.INTEGER, primary_key=True, index=True)
     lot_status = _sql.Column(_sql.String(50), default="vacant", index=True)
     
-class 

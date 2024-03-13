@@ -140,3 +140,35 @@ async def generate_messages(db: _orm.Session,msg_type: str, msg_body: str, user:
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Client error: {str(e)}")
 
+async def generate_notification(db: _orm.Session, user_id: str, msg_type: str, msg_body: str):
+    try:
+        message_data = {"msg_type": msg_type, "msg_body": msg_body, "user_id": user_id}
+        
+        message = models.Message(**message_data)
+        
+        db.add(message)
+        db.commit()
+        db.refresh(message)
+        
+        return schemas.Message.from_orm(message)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Client error: {str(e)}")
+
+
+async def create_user(user: schemas.UserCreate, db: _orm.Session):
+    try:
+        user_obj = models.User(email=user.email, hashed_password=_hash.bcrypt.hash(user.hashed_password))
+        db.add(user_obj)
+        db.commit()
+        db.refresh(user_obj)
+        
+        user_account = models.AccountBalance(user_id=user_obj.id)
+        db.add(user_account)
+        db.commit()
+        db.refresh(user_account)
+        
+        generate_notification(user=user_obj, db=db, msg_type="normal", msg_body="Account Successfully Created!")
+        
+        return user_obj
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Client error: {str(e)}")
