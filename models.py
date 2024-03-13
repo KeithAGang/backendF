@@ -45,3 +45,11 @@ class ParkingLots(Base):
     lot_id = _sql.Column(_sql.INTEGER, primary_key=True, index=True)
     lot_status = _sql.Column(_sql.String(50), default="vacant", index=True)
     
+class Booking(Base):
+    __tablename__ = "bookings"
+    
+    booking_id = _sql.Column(_sql.String(255), default=lambda: str(uuid.uuid4()), primary_key=True, index=True)
+    lot_id = _sql.Column(_sql.Integer, _sql.ForeignKey("parkinglots.lot_id"))
+    user_id = _sql.Column(_sql.String(100), _sql.ForeignKey("users.id"))
+    start_time = _sql.Column(_sql.DateTime)
+    end_time = _sql.Column(_sql.DateTime)

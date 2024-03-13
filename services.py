@@ -1,5 +1,5 @@
 #serveces.py file
-import jwt
+import jwt, random
 from main import _security, Depends, HTTPException
 from database import _orm, engine, SessionLocal, Base
 import models, schemas
@@ -140,35 +140,56 @@ async def generate_messages(db: _orm.Session,msg_type: str, msg_body: str, user:
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Client error: {str(e)}")
 
-async def generate_notification(db: _orm.Session, user_id: str, msg_type: str, msg_body: str):
+async def book_parking_lot(user: schemas.Users, db: _orm.Session, hours: int):
+    vacant_lots = db.query(models.ParkingLots).filter_by(lot_status="vacant").all()
+    user_obj = db.query(models.User).filter(models.User.id == user.id).first()  # Fetch the user object
+    
+    if not vacant_lots:
+        raise HTTPException(status_code=404, detail="No vacant parking lots available")
+    
+    selected_lot = random.choice(vacant_lots)
+    
+    # Assume the payment amount is based on the number of hours booked
+    payment_amount = calculate_payment_amount(hours)
+    
     try:
-        message_data = {"msg_type": msg_type, "msg_body": msg_body, "user_id": user_id}
+        payment_result = await pay_for_Lot(payment_amount, user=user, db=db)
         
-        message = models.Message(**message_data)
+        if "Insufficient Credits" in str(payment_result):
+            raise HTTPException(status_code=400, detail="Insufficient Credits to carry out this transaction")
         
-        db.add(message)
+        booking_start_time = _dt.datetime.utcnow()
+        booking_end_time = booking_start_time + _dt.timedelta(hours=hours)
+        
+        selected_lot.lot_status = "booked"
+        
+        booking = models.Booking(lot_id=selected_lot.lot_id, user_id=user.id, start_time=booking_start_time, end_time=booking_end_time)
+        
+        db.add(booking)
         db.commit()
-        db.refresh(message)
         
-        return schemas.Message.from_orm(message)
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Client error: {str(e)}")
+        message_body = f"You have successfully reserved parking lot {selected_lot.lot_id} for ${payment_amount}."
+        
+        return await generate_notification(db=db, msg_type="transaction", msg_body=message_body, user=user)
+    
+    except HTTPException as e:
+        # Undo changes if payment fails
+        db.rollback()
+        raise e
 
 
-async def create_user(user: schemas.UserCreate, db: _orm.Session):
-    try:
-        user_obj = models.User(email=user.email, hashed_password=_hash.bcrypt.hash(user.hashed_password))
-        db.add(user_obj)
-        db.commit()
-        db.refresh(user_obj)
+def calculate_payment_amount(hours: int):
+    # Implement your logic to calculate the payment amount based on hours booked
+    return hours * 10  # Assuming $10 per hour for parking
+
+async def generate_notification(db: _orm.Session, msg_type: str, msg_body: str, user: schemas.Users):
+    message_data = {"msg_type": msg_type, "msg_body": msg_body, "user_id": user.id}
         
-        user_account = models.AccountBalance(user_id=user_obj.id)
-        db.add(user_account)
-        db.commit()
-        db.refresh(user_account)
+    message = models.Message(**message_data)
         
-        generate_notification(user=user_obj, db=db, msg_type="normal", msg_body="Account Successfully Created!")
+    db.add(message)
+    db.commit()
+    db.refresh(message)
         
-        return user_obj
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Client error: {str(e)}")
+    return schemas.Message.from_orm(message)
+

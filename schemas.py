@@ -56,3 +56,13 @@ class payment(BaseModel):
     
 class ParkingLots(BaseModel):
     pass
+
+class Booking(BaseModel):
+    lot_id: int
+    user_id: str
+    start_time: _dt.datetime
+    end_time: _dt.datetime
+    
+    class Config:
+        from_attributes = True
+        orm_mode = True
