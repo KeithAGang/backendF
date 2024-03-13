@@ -31,14 +31,14 @@ class UserDetails(_UserBase):
         orm_mode = True
         from_attributes = True
         
-class _MessageBase(BaseModel):
-    msg_type: str = Field(default="normal")
-    msg_body: str
+class _NotificationBase(BaseModel):
+    note_type: str = Field(default="normal")
+    note_body: str
     
-class MessageCreate(_MessageBase):
+class NotificationCreate(_NotificationBase):
     pass
 
-class Message(_MessageBase):
+class Notification(_NotificationBase):
     user_id: str
     date_generated: _dt.datetime
     

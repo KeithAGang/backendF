@@ -43,10 +43,6 @@ async def create_user(user: schemas.UserCreate, db: _orm.Session):
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Client error: {str(e)}")
 
-
-
-
-
 async def authenticate_user(email:str, password:str, db: _orm.Session):
     user = await get_user_by_email(db=db, email=email)
     
@@ -63,7 +59,6 @@ async def create_token(user: models.User):
     token = jwt.encode(token_payload, JWT_SECRET, algorithm="HS256")
     return {"access_token": token, "token_type": "bearer"}
 
-
 async def get_current_user(db: _orm.Session = Depends(get_db), token: str = Depends(oauth2schema)):
     try:
         payload = jwt.decode(token, JWT_SECRET, algorithms=["HS256"])
@@ -78,46 +73,28 @@ async def get_current_user(db: _orm.Session = Depends(get_db), token: str = Depe
     except jwt.exceptions.DecodeError:
         raise HTTPException(status_code=401, detail="Invalid Token")
 
+async def get_notifications(user: schemas.Users, db: _orm.Session):
+    note = db.query(models.Notifications).filter_by(user_id=user.id)
     
-    
+    return list(map(schemas.Notification.from_orm, note))
 
-async def generate_message(user: schemas.Users, db: _orm.Session, message: schemas.MessageCreate):
-    try:
-        message_data = message.dict()
-        # message_data["date_generated"] = _dt.datetime.utcnow()  # Set the date_created field
-        
-        message = models.Message(**message_data, user_id=user.id)
-        
-        db.add(message)
-        db.commit()
-        db.refresh(message)
-        
-        return schemas.Message.from_orm(message)
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Client error: {str(e)}")
-
-async def get_messages(user: schemas.Users, db: _orm.Session):
-    message = db.query(models.Message).filter_by(user_id=user.id)
-    
-    return list(map(schemas.Message.from_orm, message))
-
-async def message_selector(msg_id: str, user: schemas.Users, db: _orm.Session):
-    message =(
-        db.query(models.Message)
+async def notification_selector(note_id: str, user: schemas.Users, db: _orm.Session):
+    note =(
+        db.query(models.Notifications)
         .filter_by(user_id = user.id)
-        .filter(models.Message.msg_id == msg_id)
+        .filter(models.Notifications.note_id == note_id)
         .first()        
     )
     
-    if message is None:
-        raise HTTPException(status_code=404, detail="No Message Found!")
+    if note is None:
+        raise HTTPException(status_code=404, detail="No Notifications Found!")
     
-    return message
+    return note
 
-async def get_message(msg_id: str, user: schemas.Users, db):
-    message = await message_selector(msg_id=msg_id, user=user, db=db)
+async def get_notification(note_id: str, user: schemas.Users, db):
+    note = await notification_selector(note_id=note_id, user=user, db=db)
     
-    return schemas.Message.from_orm(message)
+    return schemas.Notification.from_orm(note)
 
 async def get_account(user: schemas.Users, db: _orm.Session):
     account = db.query(models.AccountBalance).filter_by(user_id=user.id)
@@ -139,23 +116,9 @@ async def pay_for_Lot(amount: float, user: schemas.Users, db: _orm.Session):
     account.balance = new_balance
     
     db.commit()  # Commit the changes to update the balance in the database
-    generate_messages(db=db, msg_type="normal", msg_body=f"{holder.name}, Your transaction Was Successfdull")
+    await generate_notification(db=db, user=user, note_type="normal", note_body=f"{holder.name}, Your transaction Was Successfdull")
     
     return {"message": "Transaction successful", "new_balance": new_balance}
-
-async def generate_messages(db: _orm.Session,msg_type: str, msg_body: str, user: schemas.Users = Depends(get_current_user)):
-    try:
-        message_data = {"msg_type": msg_type, "msg_body": msg_body, "user_id": user.id}
-        
-        message = models.Message(**message_data)
-        
-        db.add(message)
-        db.commit()
-        db.refresh(message)
-        
-        return schemas.Message.from_orm(message)
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Client error: {str(e)}")
 
 async def book_parking_lot(user: schemas.Users, db: _orm.Session, hours: int, immediate_booking: bool):
     vacant_lots = db.query(models.ParkingLots).filter_by(lot_status="vacant").all()
@@ -186,30 +149,93 @@ async def book_parking_lot(user: schemas.Users, db: _orm.Session, hours: int, im
             db.add(booking)
             db.commit()
             
-            message_body = f"You have successfully booked parking lot {selected_lot.lot_id} for {hours} hours for ${payment_amount}."
+            note_body = f"{user_obj.name}, You have successfully booked parking lot {selected_lot.lot_id} for {hours} hours for ${payment_amount}."
         else:
-            message_body = f"You have successfully reserved parking lot {selected_lot.lot_id} for {hours} hours."
+            note_body = f"{user_obj.name}, You have successfully reserved parking lot {selected_lot.lot_id} for {hours} hours."
         
-        return await generate_notification(db=db, msg_type="transaction", msg_body=message_body, user=user)
+        return await generate_notification(db=db, note_type="transaction", note_body=note_body, user=user)
     
     except HTTPException as e:
         # Undo changes if payment fails
         db.rollback()
         raise e
 
-
 def calculate_payment_amount(hours: int):
     # Implement your logic to calculate the payment amount based on hours booked
     return hours * 10  # Assuming $10 per hour for parking
 
-async def generate_notification(db: _orm.Session, msg_type: str, msg_body: str, user: schemas.Users):
-    message_data = {"msg_type": msg_type, "msg_body": msg_body, "user_id": user.id}
+async def generate_notification(db: _orm.Session, note_type: str, note_body: str, user: schemas.Users):
+    note_data = {"note_type": note_type, "note_body": note_body, "user_id": user.id}
         
-    message = models.Message(**message_data)
+    note = models.Notifications(**note_data)
         
-    db.add(message)
+    db.add(note)
     db.commit()
-    db.refresh(message)
+    db.refresh(note)
         
-    return schemas.Message.from_orm(message)
+    return schemas.Notification.from_orm(note)
 
+async def revoke_my_reservation(user: schemas.UserDetails, db: _orm.Session):
+    # Find the booking based on the user's user_id
+    booking = db.query(models.Booking).filter(models.Booking.user_id == user.id).first()
+
+    if booking:
+        lot_id = booking.lot_id
+
+        # Update the lot_status for the identified lot_id to vacant
+        parking_lot = db.query(models.ParkingLots).filter(models.ParkingLots.lot_id == lot_id).first()
+        
+        if parking_lot:
+            parking_lot.lot_status = "vacant"
+            db.delete(booking)
+            db.commit()
+            return f"Booking successfully unreserved. Parking lot {parking_lot.lot_id} is now vacant."
+        else:
+            return "Parking lot not found."
+    else:
+        return "Booking not found for the user."
+    
+async def lot_selector(user: schemas.Users, db: _orm.Session):
+    booked_lot = db.query(models.Booking).filter(models.Booking.user_id == user.id).first()
+    
+    if not booked_lot:
+        raise HTTPException(status_code=404, detail="No Lots For This User Found!, Please Consider Making A Reservation")
+    note =(
+        db.query(models.ParkingLots)
+        .filter(models.ParkingLots.lot_id == booked_lot.lot_id)
+        .first()        
+    )
+    
+    if note is None:
+        raise HTTPException(status_code=404, detail="No Lots For This User Found!, Please Consider Making A Reservation")
+    
+    return note
+
+# async def generate_notifications(db: _orm.Session,note_type: str, note_body: str, user: schemas.Users = Depends(get_current_user)):
+#     try:
+#         message_data = {"note_type": note_type, "note_body": note_body, "user_id": user.id}
+        
+#         message = models.Message(**message_data)
+        
+#         db.add(message)
+#         db.commit()
+#         db.refresh(message)
+        
+#         return schemas.Message.from_orm(message)
+#     except Exception as e:
+#         raise HTTPException(status_code=400, detail=f"Client error: {str(e)}")
+
+# async def generate_notification(user: schemas.Users, db: _orm.Session, note: schemas.NotificationCreate):
+#     try:
+#         data = note.dict()
+#         # message_data["date_generated"] = _dt.datetime.utcnow()  # Set the date_created field
+        
+#         notedata = models.Notifications(**data, user_id=user.id)
+        
+#         db.add(notedata)
+#         db.commit()
+#         db.refresh(notedata)
+        
+#         return schemas.Notification.from_orm(notedata)
+#     except Exception as e:
+#         raise HTTPException(status_code=400, detail=f"Client error: {str(e)}")

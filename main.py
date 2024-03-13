@@ -37,17 +37,17 @@ async def generate_token(form_data: _security.OAuth2PasswordRequestForm = Depend
 async def get_user(current_user: Users = Depends(services.get_current_user)): # Update the dependency name
     return current_user
 
-@app.post("/messages", response_model=Message)
-async def create_message(message: MessageCreate, user: Users = Depends(services.get_current_user), db: _orm.Session = Depends(services.get_db)):
-    return await services.generate_message(user=user, db=db, message=message)
+# @app.post("/notifications", response_model=)
+# async def create_message(message: MessageCreate, user: Users = Depends(services.get_current_user), db: _orm.Session = Depends(services.get_db)):
+#     return await services.generate_message(user=user, db=db, message=message)
 
-@app.get("/messages", response_model=List[Message])
-async def get_Messages(user: Users = Depends(services.get_current_user), db: _orm.Session = Depends(services.get_db)):
-    return await services.get_messages(user=user, db=db)
+@app.get("/notifications", response_model=List[Notification])
+async def get_notifications(user: Users = Depends(services.get_current_user), db: _orm.Session = Depends(services.get_db)):
+    return await services.generate_notification(user=user, db=db)
 
-@app.get("/messages/{msg_id}", status_code=200)
-async def get_messages(msg_id: str, user: Users = Depends(services.get_current_user), db: _orm.Session = Depends(services.get_db)):
-    return await services.get_message(msg_id, user, db)
+@app.get("/notification/{msg_id}", status_code=200)
+async def get_specific_notification(msg_id: str, user: Users = Depends(services.get_current_user), db: _orm.Session = Depends(services.get_db)):
+    return await services.get_notification(msg_id, user, db)
 
 @app.get("/my_account", response_model=List[AccountBalance])
 async def get_my_account(user: Users = Depends(services.get_current_user), db:_orm.Session = Depends(services.get_db)):
@@ -61,6 +61,13 @@ async def pay_for_parking_now(amount: float, user: Users = Depends(services.get_
 async def book_parking_lot(hours: int, immediate_booking: bool = True, user: UserDetails = Depends(services.get_current_user), db: _orm.Session = Depends(services.get_db)):
     return await services.book_parking_lot(user=user, db=db, hours=hours, immediate_booking=immediate_booking)
 
+@app.get("/revoke_my_resrvation")
+async def revoke_my_parking_lot(user: UserDetails = Depends(services.get_current_user), db: _orm.Session = Depends(services.get_db)):
+    return await services.revoke_my_reservation(user=user, db=db)
+
+@app.get("/my_parkinglot")
+async def get_me_parking_lot(user: UserDetails = Depends(services.get_current_user), db: _orm.Session = Depends(services.get_db)):
+    return await services.lot_selector(user=user, db=db)
 
 
 #if you want to add lots to the db, uncommnet the code below
